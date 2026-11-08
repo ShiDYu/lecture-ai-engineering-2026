@@ -5,10 +5,13 @@
 """
 
 import json
+import random
 from functools import cache
 from pathlib import Path
+from uuid import uuid4
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+LEARNING_LOG_DIR = DATA_DIR.parent / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -77,3 +80,32 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"第{lecture}回の要点はまだありません。用意されている回: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+def make_quiz(lecture: int) -> str:
+    """指定した回の用語から 1つを選び、確認問題と答えを返す。
+    「第2回の確認問題を出して」のように、復習用の問題を求められたときに使う。
+    """
+    glossary = load_glossary()
+    lecture_terms = [e for e in glossary if e["lecture"] == lecture]
+    if not lecture_terms:
+        return f"第{lecture}回の用語はまだありません。"
+    term = random.choice(lecture_terms)
+    return json.dumps({
+        "question": f"{term['term']} の意味は？",
+        "answer": term["definition"],
+    })
+
+def save_learning_log(lecture: int, content: str) -> str:
+    """指定した講義回で学習した内容をlearning_log/に保存する。
+
+    利用者が保存を求めたときに使う。lectureは講義回、contentは学習内容。
+    エージェント側で利用者の承認を得てから実行する。
+    """
+    path = LEARNING_LOG_DIR / f"{uuid4().hex}.md"
+    try:
+        LEARNING_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with path.open("x", encoding="utf-8") as f:
+            f.write(f"# 第{lecture}回の学習記録\n\n{content}\n")
+    except OSError as e:
+        return f"保存できませんでした: {e}"
+    return f"保存しました: learning_log/{path.name}"
